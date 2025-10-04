@@ -1,0 +1,188 @@
+// productModel.js
+
+const mongoose = require('mongoose');
+
+// Define the Product Schema
+const productSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: [true, 'A product must have a name'], // Validation: Name is required
+        trim: true,
+        maxlength: [100, 'Product name cannot exceed 100 characters']
+    },
+    price: {
+        type: Number,
+        required: [true, 'A product must have a price'], // Validation: Price is required
+        min: [0, 'Price must be a positive number'] // Validation: Price must be >= 0
+    },
+    category: {
+        type: String,
+        required: [true, 'A product must have a category'], // Validation: Category is required
+        enum: {
+            values: ['Electronics', 'Books', 'Clothing', 'Home Goods', 'Other'], // Validation: Only specific categories are allowed
+            message: 'Category is either: Electronics, Books, Clothing, Home Goods, or Other'
+        }
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now // Default value for creation time
+    }
+});
+
+// Create and export the Product Model
+const Product = mongoose.model('Product', productSchema);
+
+module.exports = Product;
+
+
+
+
+// app.js
+
+const mongoose = require('mongoose');
+const Product = require('./productModel'); // Import the Product Model
+
+// Replace with your MongoDB connection string
+const DB_URI = 'mongodb://localhost:27017/productDB'; 
+
+// Function to establish database connection
+const connectDB = async () => {
+    try {
+        await mongoose.connect(DB_URI);
+        console.log('✅ MongoDB connection successful!');
+    } catch (error) {
+        console.error('❌ MongoDB connection error:', error.message);
+        // Exit process if connection fails
+        process.exit(1); 
+    }
+};
+
+connectDB(); // Execute the connection function
+
+// The CRUD functions will go here (see next section)
+
+// A. Create (Add a New Product)
+const createProduct = async (productData) => {
+    try {
+        const newProduct = await Product.create(productData);
+        console.log('\n➕ Product Added Successfully:');
+        console.log(newProduct);
+        return newProduct;
+    } catch (error) {
+        console.error('\n❌ ERROR creating product:', error.message);
+        // Specific handling for Mongoose validation errors
+        if (error.name === 'ValidationError') {
+            const messages = Object.values(error.errors).map(val => val.message);
+            console.error('Validation Errors:', messages);
+        }
+    }
+};
+
+// B. Read (Retrieve All Products)
+const getAllProducts = async () => {
+    try {
+        const products = await Product.find();
+        console.log('\n📚 All Products Retrieved:');
+        if (products.length === 0) {
+            console.log('No products found in the database.');
+        } else {
+            console.log(`Total products: ${products.length}`);
+            products.forEach(p => console.log(`ID: ${p._id}, Name: ${p.name}, Price: $${p.price}, Category: ${p.category}`));
+        }
+        return products;
+    } catch (error) {
+        console.error('\n❌ ERROR retrieving products:', error.message);
+    }
+};
+
+// C. Update (Update Product by ID)
+const updateProduct = async (id, updateData) => {
+    try {
+        const updatedProduct = await Product.findByIdAndUpdate(
+            id,
+            updateData,
+            {
+                new: true,          // Return the new updated document
+                runValidators: true // Run schema validators on update
+            }
+        );
+
+        if (!updatedProduct) {
+            console.log(`\n⚠️ Product with ID ${id} not found for update.`);
+            return null;
+        }
+
+        console.log('\n✏️ Product Updated Successfully:');
+        console.log(updatedProduct);
+        return updatedProduct;
+    } catch (error) {
+        console.error('\n❌ ERROR updating product:', error.message);
+        if (error.name === 'ValidationError') {
+            const messages = Object.values(error.errors).map(val => val.message);
+            console.error('Validation Errors:', messages);
+        }
+    }
+};
+
+// D. Delete (Delete Product by ID)
+const deleteProduct = async (id) => {
+    try {
+        const deletedProduct = await Product.findByIdAndDelete(id);
+
+        if (!deletedProduct) {
+            console.log(`\n⚠️ Product with ID ${id} not found for deletion.`);
+            return null;
+        }
+
+        console.log('\n🗑️ Product Deleted Successfully:');
+        console.log(`Deleted Product Name: ${deletedProduct.name}, ID: ${deletedProduct._id}`);
+        return deletedProduct;
+    } catch (error) {
+        console.error('\n❌ ERROR deleting product:', error.message);
+    }
+};
+
+// Example Usage Demonstration
+const runDemo = async () => {
+    // 1. CREATE Products
+    const product1 = await createProduct({
+        name: '4K Smart TV',
+        price: 599.99,
+        category: 'Electronics'
+    });
+
+    await createProduct({
+        name: 'The Great Novel',
+        price: 15.50,
+        category: 'Books'
+    });
+    
+    // Example of a product that will fail validation (price < 0)
+    await createProduct({
+        name: 'Invalid Test Product',
+        price: -10,
+        category: 'Clothing'
+    });
+
+    // 2. READ All Products
+    const allProducts = await getAllProducts();
+    const tvId = product1 ? product1._id : null;
+
+    if (tvId) {
+        // 3. UPDATE Product (only if creation was successful)
+        await updateProduct(tvId, { price: 549.99, name: '4K Smart TV (Holiday Edition)' });
+
+        // 4. DELETE Product (only if creation was successful)
+        await deleteProduct(tvId);
+    }
+
+    // 5. READ All Products again to show changes
+    await getAllProducts();
+
+    // Close the database connection after the demo
+    mongoose.connection.close();
+    console.log('\nDatabase connection closed.');
+};
+
+// Start the demonstration after a small delay to ensure connection
+setTimeout(runDemo, 1000);
